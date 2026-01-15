@@ -5,7 +5,7 @@ import { ConvexError, v } from "convex/values";
 import { authComponent } from "./auth";
 import { Doc } from "./_generated/dataModel";
 
-// Create a new task with the given text
+// Create a new post
 export const createPost = mutation({
   args: {
     title: v.string(),
@@ -25,16 +25,18 @@ export const createPost = mutation({
       authorId: user._id,
       imageStorageId: args.imageStorageId,
     });
+
     return blogArticle;
   },
 });
 
+// Public, read-only: should NOT throw if unauthenticated
 export const getPosts = query({
   args: {},
   handler: async (ctx) => {
     const posts = await ctx.db.query("posts").order("desc").collect();
 
-    return await Promise.all(
+    const withImages = await Promise.all(
       posts.map(async (post) => {
         const resolvedImageUrl =
           post.imageStorageId !== undefined
@@ -47,6 +49,8 @@ export const getPosts = query({
         };
       })
     );
+
+    return withImages;
   },
 });
 
@@ -75,7 +79,7 @@ export const getPostById = query({
     }
 
     const resolvedImageUrl =
-      post?.imageStorageId !== undefined
+      post.imageStorageId !== undefined
         ? await ctx.storage.getUrl(post.imageStorageId)
         : null;
 
@@ -102,12 +106,9 @@ export const searchPosts = query({
     const results: Array<SearchResultTypes> = [];
     const seen = new Set<string>();
 
-    // 1. Remove 'async' here. This is a synchronous helper.
     const pushDocs = (docs: Array<Doc<"posts">>) => {
       for (const doc of docs) {
-        if (seen.has(doc._id)) {
-          continue;
-        }
+        if (seen.has(doc._id)) continue;
 
         seen.add(doc._id);
         results.push({
@@ -116,22 +117,17 @@ export const searchPosts = query({
           body: doc.body,
         });
 
-        if (results.length >= limit) {
-          break;
-        }
+        if (results.length >= limit) break;
       }
     };
 
-    // Search Titles
     const titleMatches = await ctx.db
       .query("posts")
       .withSearchIndex("search_title", (q) => q.search("title", args.term))
       .take(limit);
 
-    // 2. This now runs synchronously and immediately fills 'results'
     pushDocs(titleMatches);
 
-    // Search Body (only if we need more results)
     if (results.length < limit) {
       const bodyMatches = await ctx.db
         .query("posts")

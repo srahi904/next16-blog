@@ -8,14 +8,8 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Metadata } from "next";
-
+import type { Metadata } from "next";
 import { cacheLife, cacheTag } from "next/cache";
-
-// export const dynamic = "force-static";
-// export const revalidate = 30;
-// false | 0 | number
-// 'auto' | 'force-dynamic' | 'error' | 'force-static'
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -34,7 +28,10 @@ export default function BlogPage() {
           Insights, Tips, and Updates
         </p>
       </div>
-      <Suspense fallback={SkeletonLoadingUI()}>
+
+      <Suspense fallback={<SkeletonLoadingUI />}>
+        {/* Async server component inside Suspense */}
+
         <LoadBlogList />
       </Suspense>
     </div>
@@ -46,11 +43,21 @@ async function LoadBlogList() {
   cacheLife("hours");
   cacheTag("blog");
 
-  const data = await fetchQuery(api.posts.getPosts);
+  let data:
+    | Awaited<ReturnType<typeof fetchQuery<typeof api.posts.getPosts>>>
+    | [] = [];
+
+  try {
+    // `cache: "no-store"` forces dynamic fetch without using `dynamic` export. [web:26][web:32]
+    data = await fetchQuery(api.posts.getPosts, {}, { cache: "no-store" });
+  } catch (error) {
+    console.error("Error fetching posts", error);
+    data = [];
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 sm:grid-cols-2">
-      {data?.map((post) => (
+      {data.map((post) => (
         <Card key={post._id} className="pt-0">
           <div className="relative h-48 w-full overflow-hidden">
             <Image
