@@ -30,8 +30,6 @@ export default function BlogPage() {
       </div>
 
       <Suspense fallback={<SkeletonLoadingUI />}>
-        {/* Async server component inside Suspense */}
-
         <LoadBlogList />
       </Suspense>
     </div>
@@ -39,25 +37,19 @@ export default function BlogPage() {
 }
 
 async function LoadBlogList() {
+  // This directive tells Next.js to run this function at BUILD time
+  // and cache the result for the specified duration.
   "use cache";
   cacheLife("hours");
   cacheTag("blog");
 
-  let data:
-    | Awaited<ReturnType<typeof fetchQuery<typeof api.posts.getPosts>>>
-    | [] = [];
-
-  try {
-    // `cache: "no-store"` forces dynamic fetch without using `dynamic` export. [web:26][web:32]
-    data = await fetchQuery(api.posts.getPosts, {}, { cache: "no-store" });
-  } catch (error) {
-    console.error("Error fetching posts", error);
-    data = [];
-  }
+  // If this fails during build (e.g., missing Env Vars), the build MUST fail.
+  // Do not wrap this in try/catch, or you will cache an empty page.
+  const data = await fetchQuery(api.posts.getPosts);
 
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 sm:grid-cols-2">
-      {data.map((post) => (
+      {data?.map((post) => (
         <Card key={post._id} className="pt-0">
           <div className="relative h-48 w-full overflow-hidden">
             <Image
